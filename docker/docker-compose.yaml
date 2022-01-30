@@ -1,0 +1,66 @@
+version: "3.7"
+
+services:
+  nginx-proxy:
+    image: jwilder/nginx-proxy
+    ports:
+      - "80:80"
+    networks:
+      - reverse-proxy
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+  carnage-php-fpm:
+    dns:
+      - 8.8.8.8
+    build:
+      context: ../
+      dockerfile: docker/php/Dockerfile
+      args:
+        - UID=1000
+        - GID=1000
+    user: 1000:1000
+    volumes:
+      - ../:/app
+    restart: on-failure
+    working_dir: /app
+    env_file:
+      - .env
+    networks:
+      - carnage-site
+
+  carnage-nginx:
+    image: nginx:1.19-alpine
+    volumes:
+      - ../public:/app
+      - ../docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - carnage-php-fpm
+    networks:
+      carnage-site:
+      reverse-proxy:
+      main:
+        aliases:
+            - carnage.local
+    environment:
+      - VIRTUAL_HOST=carnage.local
+
+  carnage-mysql:
+    image: mysql:8
+    ports:
+      - 3306:3306
+    environment: 
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_PASSWORD=carnage
+      - MYSQL_USER=carnage
+      - MYSQL_DATABASE=carnage_db
+    networks:
+      - carnage-site
+
+networks:
+  carnage-site:
+  reverse-proxy:
+    external: true
+  main:
+    external:
+      name: carnage_default
